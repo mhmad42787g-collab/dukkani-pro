@@ -1,0 +1,65 @@
+name: Build Dukkani Pro APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Unpack project ZIP if needed
+        shell: bash
+        run: |
+          if [ -f package.json ]; then
+            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
+          elif [ -f DukkaniPro_APK_Project.zip ]; then
+            unzip -q DukkaniPro_APK_Project.zip -d extracted
+            echo "PROJECT_DIR=extracted/DukkaniPro_APK_Project" >> "$GITHUB_ENV"
+          else
+            echo "Could not find package.json or DukkaniPro_APK_Project.zip" >&2
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install JavaScript dependencies
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: npm install
+
+      - name: Generate Android project
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: npx cap add android
+
+      - name: Sync web app into Android project
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: ${{ env.PROJECT_DIR }}/android
+        run: chmod +x gradlew && ./gradlew assembleDebug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dukkani-Pro-debug-APK
+          path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
